@@ -1,54 +1,108 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz_data;
-
-import '../models/project.dart';
 
 class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
-    const AndroidInitializationSettings androidSettings =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
+    // Инициализация таймзон
+    tz.initializeTimeZones();
 
-    const InitializationSettings settings =
-    InitializationSettings(android: androidSettings);
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    final iosInit = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
 
-    await _plugin.initialize(settings);
+    final initializationSettings = InitializationSettings(
+      android: androidInit,
+      iOS: iosInit,
+    );
 
-    // Запрос разрешений (особенно для iOS, если нужно)
-    await _plugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
-
-    tz_data.initializeTimeZones();
+    await _plugin.initialize(initializationSettings);
   }
 
-  Future<void> scheduleDeadline(Project project) async {
-    final now = tz.TZDateTime.now(tz.local);
-    final due = tz.TZDateTime.from(project.deadline, tz.local).subtract(const Duration(hours: 2));
+  /// Простое уведомление
+  Future<void> showSimple(String title, String body) async {
+    const androidDetails = AndroidNotificationDetails(
+      'main_channel',
+      'Основной канал',
+      channelDescription: 'Уведомления приложения',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+    );
 
-    if (due.isBefore(now)) {
-      return; // Не планировать прошедшие уведомления
-    }
+    const iosDetails = DarwinNotificationDetails();
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _plugin.show(
+      0,
+      title,
+      body,
+      notificationDetails,
+    );
+  }
+
+  /// Плановое уведомление (например, напоминание о дедлайне)
+  Future<void> scheduleNotification({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledTime,
+  }) async {
+    final androidDetails = AndroidNotificationDetails(
+      'scheduled_channel',
+      'Плановые уведомления',
+      channelDescription: 'Напоминания о задачах и проектах',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+    );
+
+    const iosDetails = DarwinNotificationDetails();
+
+    final notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
 
     await _plugin.zonedSchedule(
-      project.id.hashCode & 0x7fffffff, // безопасный положительный ID
-      'Срок проекта приближается',
-      '${project.title} истекает в ${project.deadline}',
-      due,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'deadline_channel',
-          'Дедлайны',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-      ),
+      id,
+      title,
+      body,
+      tz.TZDateTime.from(scheduledTime, tz.local),
+      notificationDetails,
       androidAllowWhileIdle: true,
       uiLocalNotificationDateInterpretation:
       UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.dateAndTime,
     );
+  }
+
+  /// Удалить конкретное уведомление
+  Future<void> cancel(int id) async {
+    await _plugin.cancel(id);
+  }
+
+  /// Удалить все уведомления
+  Future<void> cancelAll() async {
+    await _plugin.cancelAll();
+  }
+
+  /// Запрос разрешений на уведомления (особенно важно для iOS)
+  Future<void> requestPermissions() async {
+    await _plugin
+        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
   }
 }

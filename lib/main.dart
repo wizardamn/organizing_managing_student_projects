@@ -6,31 +6,41 @@ import 'package:easy_localization/easy_localization.dart';
 
 import 'providers/project_provider.dart';
 import 'providers/theme_provider.dart';
+import 'services/project_service.dart';
 import 'screens/auth/login_wrapper.dart';
-import 'services/supabase_project_repository.dart';
+import 'screens/auth/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await EasyLocalization.ensureInitialized();
 
+  final supabaseUrl = dotenv.env['SUPABASE_URL'];
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+  if (supabaseUrl == null || supabaseAnonKey == null) {
+    throw Exception('SUPABASE_URL или SUPABASE_ANON_KEY отсутствуют в .env!');
+  }
+
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
+
+  final currentUser = Supabase.instance.client.auth.currentUser;
 
   runApp(
     EasyLocalization(
-      supportedLocales: const [Locale('en'), Locale('ru')],
-      path: 'assets/lang', // Убедитесь, что ваши en.json и ru.json находятся по этому пути
+      supportedLocales: const [Locale('ru'), Locale('en')],
+      path: 'assets/lang',
       fallbackLocale: const Locale('ru'),
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
           ChangeNotifierProvider(
             create: (_) => ProjectProvider(
-              SupabaseProjectRepository(),
-              Supabase.instance.client.auth.currentUser?.id,
+              ProjectService(),
+              currentUser?.id,
             ),
           ),
         ],
@@ -48,14 +58,17 @@ class StudentProjectsApp extends StatelessWidget {
     final themeProv = context.watch<ThemeProvider>();
 
     return MaterialApp(
-      title: 'Student Projects',
+      title: 'Организация проектов учащихся',
       debugShowCheckedModeBanner: false,
-      themeMode: themeProv.currentTheme,
+      themeMode: themeProv.isDark ? ThemeMode.dark : ThemeMode.light,
       theme: ThemeData.light(useMaterial3: true),
       darkTheme: ThemeData.dark(useMaterial3: true),
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
+      routes: {
+        '/login': (_) => const LoginScreen(),
+      },
       home: const LoginWrapper(),
     );
   }

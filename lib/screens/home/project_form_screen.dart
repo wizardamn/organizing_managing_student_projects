@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
-import '../models/project.dart';
-import '../providers/project_provider.dart';
+import '../../models/project.dart';
+import '../../providers/project_provider.dart';
 
 class ProjectFormScreen extends StatefulWidget {
   const ProjectFormScreen({
@@ -24,20 +23,21 @@ class ProjectFormScreen extends StatefulWidget {
 class _ProjectFormScreenState extends State<ProjectFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late Project _edited;
-  final _gradeController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _edited = Project.fromMap(widget.project.toMap());
-    _gradeController.text =
-    _edited.grade != null ? _edited.grade!.toString() : '';
-  }
-
-  @override
-  void dispose() {
-    _gradeController.dispose();
-    super.dispose();
+    _edited = Project(
+      id: widget.project.id,
+      title: widget.project.title,
+      description: widget.project.description,
+      deadline: widget.project.deadline,
+      status: widget.project.status,
+      ownerId: widget.project.ownerId,
+      attachments: List<String>.from(widget.project.attachments),
+      grade: widget.project.grade,
+      participants: List<String>.from(widget.project.participants),
+    );
   }
 
   @override
@@ -47,7 +47,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isNew ? 'Новый проект' : 'Редактирование'),
+        title: Text(widget.isNew ? 'Новый проект' : 'Редактирование проекта'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -58,7 +58,10 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               TextFormField(
                 initialValue: _edited.title,
                 enabled: !isReadOnly,
-                decoration: const InputDecoration(labelText: 'Название'),
+                decoration: const InputDecoration(
+                  labelText: 'Название',
+                  border: OutlineInputBorder(),
+                ),
                 validator: (v) =>
                 (v == null || v.trim().isEmpty) ? 'Введите название' : null,
                 onSaved: (v) => _edited.title = v!.trim(),
@@ -67,7 +70,10 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               TextFormField(
                 initialValue: _edited.description,
                 enabled: !isReadOnly,
-                decoration: const InputDecoration(labelText: 'Описание'),
+                decoration: const InputDecoration(
+                  labelText: 'Описание',
+                  border: OutlineInputBorder(),
+                ),
                 maxLines: 3,
                 onSaved: (v) => _edited.description = v?.trim() ?? '',
               ),
@@ -80,23 +86,30 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               const SizedBox(height: 12),
               DropdownButtonFormField<ProjectStatus>(
                 value: _edited.status,
-                decoration: const InputDecoration(labelText: 'Статус'),
-                items: ProjectStatus.values.map((s) {
-                  return DropdownMenuItem(
-                    value: s,
-                    child: Text(_statusLabel(s)),
-                  );
-                }).toList(),
+                decoration: const InputDecoration(
+                  labelText: 'Статус',
+                  border: OutlineInputBorder(),
+                ),
+                items: ProjectStatus.values
+                    .map((s) => DropdownMenuItem(
+                  value: s,
+                  child: Text(_statusLabel(s)),
+                ))
+                    .toList(),
                 onChanged: isReadOnly
                     ? null
                     : (v) => setState(() => _edited.status = v!),
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _gradeController,
+                initialValue: _edited.grade?.toString() ?? '',
                 enabled: !isReadOnly,
-                decoration: const InputDecoration(labelText: 'Оценка (0–10)'),
-                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Оценка (0–10)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
                   final val = double.tryParse(v);
@@ -105,13 +118,12 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   }
                   return null;
                 },
-                onSaved: (v) {
-                  final val = double.tryParse(v ?? '');
-                  _edited.grade = val;
-                },
+                onSaved: (v) => _edited.grade =
+                (v == null || v.isEmpty) ? null : double.parse(v),
               ),
-              const SizedBox(height: 24),
-              Text('Вложения:', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 16),
+              Text('Вложения:',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -127,33 +139,25 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                             right: -10,
                             top: -10,
                             child: IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () {
-                                setState(() {
-                                  _edited.attachments.remove(path);
-                                });
-                              },
+                              icon:
+                              const Icon(Icons.close, size: 18, color: Colors.red),
+                              onPressed: () => setState(() {
+                                _edited.attachments.remove(path);
+                              }),
                             ),
                           ),
                       ],
                     ),
                   ),
                   if (!isReadOnly)
-                    InkWell(
-                      onTap: _pickMedia,
-                      child: Container(
-                        width: 90,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.attach_file, size: 30),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.attach_file),
+                      tooltip: 'Добавить фото',
+                      onPressed: _pickMedia,
                     ),
                 ],
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: isReadOnly
                     ? null
@@ -165,7 +169,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                     } else {
                       await prov.updateProject(_edited);
                     }
-                    if (mounted) Navigator.pop(context);
+                    if (mounted) Navigator.pop(context, true);
                   }
                 },
                 child: const Text('Сохранить'),
@@ -178,17 +182,21 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   }
 
   Future<void> _pickMedia() async {
-    final picker = ImagePicker();
-    final List<XFile> images = await picker.pickMultiImage();
-    if (images.isNotEmpty) {
-      setState(() {
-        _edited.attachments.addAll(images.map((x) => x.path));
-      });
+    try {
+      final picker = ImagePicker();
+      final List<XFile>? imgs = await picker.pickMultiImage();
+      if (imgs != null && imgs.isNotEmpty) {
+        setState(() {
+          _edited.attachments.addAll(imgs.map((x) => x.path));
+        });
+      }
+    } catch (e) {
+      debugPrint('Ошибка при выборе изображений: $e');
     }
   }
 
-  String _statusLabel(ProjectStatus status) {
-    switch (status) {
+  String _statusLabel(ProjectStatus s) {
+    switch (s) {
       case ProjectStatus.planned:
         return 'Запланирован';
       case ProjectStatus.inProgress:
@@ -260,11 +268,11 @@ class _DatePickerFieldState extends State<_DatePickerField> {
 
 class _Thumb extends StatelessWidget {
   const _Thumb({required this.path});
-
   final String path;
 
   @override
   Widget build(BuildContext context) {
+    final file = File(path);
     return Container(
       width: 90,
       height: 90,
@@ -273,7 +281,9 @@ class _Thumb extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.hardEdge,
-      child: Image.file(File(path), fit: BoxFit.cover),
+      child: file.existsSync()
+          ? Image.file(file, fit: BoxFit.cover)
+          : const Icon(Icons.broken_image),
     );
   }
 }

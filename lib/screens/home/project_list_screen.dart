@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
-import '../models/project.dart';
-import '../providers/project_provider.dart';
-import '../screens/project_form_screen.dart';
-import '../widgets/user_profile_drawer.dart';
+import '../../models/project.dart';
+import '../../providers/project_provider.dart';
+import 'project_form_screen.dart';
+import '../../widgets/user_profile_drawer.dart';
 
 class ProjectListScreen extends StatefulWidget {
   const ProjectListScreen({super.key});
@@ -15,18 +14,12 @@ class ProjectListScreen extends StatefulWidget {
 }
 
 class _ProjectListScreenState extends State<ProjectListScreen> {
-  bool _loading = true;
-
   @override
   void initState() {
     super.initState();
-    _loadProjects();
-  }
-
-  Future<void> _loadProjects() async {
-    setState(() => _loading = true);
-    await Provider.of<ProjectProvider>(context, listen: false).fetchProjects();
-    if (mounted) setState(() => _loading = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<ProjectProvider>(context, listen: false).fetchProjects();
+    });
   }
 
   @override
@@ -61,15 +54,12 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
         ],
       ),
       drawer: const UserProfileDrawer(),
-      body: _loading
+      body: prov.isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _loadProjects,
+        onRefresh: prov.fetchProjects,
         child: projects.isEmpty
-            ? const Center(
-          child: Text('Нет проектов, удовлетворяющих условиям фильтра.',
-              style: TextStyle(fontSize: 16)),
-        )
+            ? const Center(child: Text('Нет проектов', style: TextStyle(fontSize: 16)))
             : ListView.builder(
           padding: const EdgeInsets.only(bottom: 80),
           itemCount: projects.length,
@@ -93,16 +83,34 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                       Text('Оценка: ${p.grade!.toStringAsFixed(1)}'),
                   ],
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'edit') {
+                      final updated = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ProjectFormScreen(project: p, isNew: false),
+                        ),
+                      );
+                      if (updated == true) await prov.fetchProjects();
+                    } else if (value == 'delete') {
+                      _confirmDelete(context, prov, p.id);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Редактировать')),
+                    PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                  ],
+                  icon: const Icon(Icons.more_vert),
+                ),
                 onTap: () async {
                   final updated = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          ProjectFormScreen(project: p, isNew: false),
+                      builder: (_) => ProjectFormScreen(project: p, isNew: false),
                     ),
                   );
-                  if (updated == true) await _loadProjects();
+                  if (updated == true) await prov.fetchProjects();
                 },
               ),
             );
@@ -121,7 +129,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
             ),
           );
           if (created == true) {
-            await _loadProjects();
+            await prov.fetchProjects();
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Проект успешно добавлен')),
@@ -163,6 +171,36 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       case 'inProgress':
         prov.setFilter(ProjectFilter.inProgressOnly);
         break;
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, ProjectProvider prov, String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить проект?'),
+        content: const Text('Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await prov.deleteProject(id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Проект удалён')),
+        );
+      }
     }
   }
 }

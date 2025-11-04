@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/auth_service.dart';
+import '../home/project_list_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -9,83 +10,54 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailC = TextEditingController();
-  final _passC = TextEditingController();
-  bool _loading = false;
-  String? _error;
+  final _auth = AuthService();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _fullName = TextEditingController();
+  String _role = 'student';
 
-  @override
-  void dispose() {
-    _emailC.dispose();
-    _passC.dispose();
-    super.dispose();
-  }
-
-  Future<void> _register() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      await Supabase.instance.client.auth.signUp(
-          email: _emailC.text.trim(), password: _passC.text);
-      if (!mounted) return;
+  void _register() async {
+    final success = await _auth.signUp(
+      _email.text.trim(),
+      _password.text.trim(),
+      _fullName.text.trim(),
+      _role,
+    );
+    if (success && mounted) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProjectListScreen()));
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Проверьте почту для подтверждения')),
+        const SnackBar(content: Text('Ошибка регистрации')),
       );
-      Navigator.pop(context);
-    } catch (e) {
-      setState(() =>
-      _error = e is AuthException ? e.message : 'Ошибка регистрации');
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Scaffold(
-        appBar: AppBar(title: const Text('Регистрация')),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(children: [
-            if (_error != null) ...[
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 16),
-            ],
-            Form(
-              key: _formKey,
-              child: Column(children: [
-                TextFormField(
-                  controller: _emailC,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  validator: (v) =>
-                  (v?.isEmpty ?? true)
-                      ? 'Введите email'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _passC,
-                  decoration: const InputDecoration(
-                      labelText: 'Пароль (мин.6)'),
-                  obscureText: true,
-                  validator: (v) =>
-                  (v?.length ?? 0) < 6
-                      ? 'Минимум 6 символов'
-                      : null,
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(onPressed: _register,
-                    child: _loading
-                        ? const CircularProgressIndicator()
-                        : const Text('Зарегистрироваться')),
-              ]),
-            )
-          ]),
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Регистрация')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextField(controller: _fullName, decoration: const InputDecoration(labelText: 'Имя')),
+            TextField(controller: _email, decoration: const InputDecoration(labelText: 'Email')),
+            TextField(controller: _password, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
+            DropdownButton<String>(
+              value: _role,
+              items: const [
+                DropdownMenuItem(value: 'student', child: Text('Учащийся')),
+                DropdownMenuItem(value: 'teacher', child: Text('Преподаватель')),
+                DropdownMenuItem(value: 'leader', child: Text('Руководитель проекта')),
+              ],
+              onChanged: (v) => setState(() => _role = v!),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(onPressed: _register, child: const Text('Зарегистрироваться')),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }

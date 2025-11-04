@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import '../../providers/project_provider.dart';
-import '../project_list_screen.dart';
+import '../../services/auth_service.dart';
+import '../home/project_list_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,106 +11,41 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLogin = true;
-  String? _error;
+  final _auth = AuthService();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final email = _emailController.text.trim();
-    final pwd = _passwordController.text.trim();
-
-    try {
-      final auth = Supabase.instance.client.auth;
-      final response = _isLogin
-          ? await auth.signInWithPassword(email: email, password: pwd)
-          : await auth.signUp(email: email, password: pwd);
-
-      final userId = response.user?.id;
-      if (!mounted) return;
-
-      Provider.of<ProjectProvider>(context, listen: false).initialize(userId: userId);
-
+  void _login() async {
+    final success = await _auth.signIn(_email.text.trim(), _password.text.trim());
+    if (success && mounted) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const ProjectListScreen()),
       );
-    } catch (e) {
-      setState(() {
-        _error = e is AuthException ? e.message : 'Ошибка авторизации';
-      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Неверный email или пароль')),
+      );
     }
-  }
-
-  Future<void> _guestLogin() async {
-    if (!mounted) return;
-
-    Provider.of<ProjectProvider>(context, listen: false).initialize(userId: null);
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const ProjectListScreen()),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Вход')),
+      appBar: AppBar(title: const Text('Авторизация')),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (_error != null) ...[
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 16),
-            ],
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    validator: (v) => (v?.isEmpty ?? true) ? 'Введите email' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(labelText: 'Пароль'),
-                    obscureText: true,
-                    validator: (v) => (v?.isEmpty ?? true) ? 'Введите пароль' : null,
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _submit,
-                    child: Text(_isLogin ? 'Войти' : 'Зарегистрироваться'),
-                  ),
-                ],
-              ),
-            ),
+            TextField(controller: _email, decoration: const InputDecoration(labelText: 'Email')),
+            TextField(controller: _password, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
+            const SizedBox(height: 20),
+            ElevatedButton(onPressed: _login, child: const Text('Войти')),
             TextButton(
-              onPressed: () => setState(() {
-                _isLogin = !_isLogin;
-                _error = null;
-              }),
-              child: Text(_isLogin ? 'Создать аккаунт' : 'Уже есть аккаунт? Войти'),
-            ),
-            const Divider(height: 32),
-            OutlinedButton(
-              onPressed: _guestLogin,
-              child: const Text('Войти как гость'),
-            ),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
+              child: const Text('Зарегистрироваться'),
+            )
           ],
         ),
       ),

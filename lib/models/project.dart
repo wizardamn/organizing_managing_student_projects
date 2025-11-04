@@ -1,9 +1,7 @@
 import 'package:uuid/uuid.dart';
 
-/// Статус проекта
 enum ProjectStatus { planned, inProgress, completed }
 
-/// Модель проекта
 class Project {
   final String id;
   String title;
@@ -15,7 +13,6 @@ class Project {
   double? grade;
   List<String> participants;
 
-  /// Конструктор проекта
   Project({
     required this.id,
     required this.title,
@@ -28,23 +25,31 @@ class Project {
     this.participants = const [],
   });
 
-  /// Создание объекта из Map (например, из Supabase)
   factory Project.fromMap(Map<String, dynamic> map) {
+    // Supabase returns nested fields as maps or lists, handle carefully
+    final deadlineRaw = map['deadline'];
+    DateTime parsedDeadline;
+    if (deadlineRaw is String) {
+      parsedDeadline = DateTime.tryParse(deadlineRaw) ?? DateTime.now();
+    } else if (deadlineRaw is DateTime) {
+      parsedDeadline = deadlineRaw;
+    } else {
+      parsedDeadline = DateTime.now();
+    }
+
     return Project(
       id: map['id'] as String,
-      title: map['title'] as String? ?? '',
-      description: map['description'] as String? ?? '',
-      deadline: DateTime.tryParse(map['deadline'] as String? ?? '') ?? DateTime.now(),
-      status: ProjectStatus.values[
-      (map['status'] is int) ? map['status'] as int : int.tryParse(map['status'].toString()) ?? 0],
-      ownerId: map['owner_id'] as String? ?? '',
-      attachments: _parseStringList(map['attachments']),
-      grade: _parseGrade(map['grade']),
-      participants: _parseStringList(map['participants']),
+      title: (map['title'] ?? '') as String,
+      description: (map['description'] ?? '') as String,
+      deadline: parsedDeadline,
+      status: ProjectStatus.values[(map['status'] ?? 0) as int],
+      ownerId: (map['owner_id'] ?? '') as String,
+      attachments: List<String>.from(map['attachments'] ?? []),
+      grade: map['grade'] != null ? (map['grade'] as num).toDouble() : null,
+      participants: List<String>.from(map['participants'] ?? []),
     );
   }
 
-  /// Преобразование объекта в Map (для Supabase)
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -59,7 +64,6 @@ class Project {
     };
   }
 
-  /// Создание пустого проекта (по умолчанию: 7 дней на выполнение)
   static Project empty(String ownerId) {
     return Project(
       id: const Uuid().v4(),
@@ -69,22 +73,5 @@ class Project {
       ownerId: ownerId,
       participants: [ownerId],
     );
-  }
-
-  /// Вспомогательный метод: парсинг списка строк
-  static List<String> _parseStringList(dynamic value) {
-    if (value == null) return [];
-    if (value is List<String>) return value;
-    if (value is List<dynamic>) {
-      return value.map((e) => e.toString()).toList();
-    }
-    return [];
-  }
-
-  /// Вспомогательный метод: парсинг оценки
-  static double? _parseGrade(dynamic value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString());
   }
 }

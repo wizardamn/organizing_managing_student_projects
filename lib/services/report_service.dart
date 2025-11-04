@@ -1,68 +1,79 @@
+// lib/services/report_service.dart
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
-
 import '../models/project.dart';
 
 class ReportService {
-  Future<void> generateAndPrint(List<Project> list) async {
-    if (list.isEmpty) return;
+  /// Генерация PDF-отчета по списку проектов и вывод на печать/просмотр
+  Future<void> generateAndPrint(List<Project> projects) async {
+    if (projects.isEmpty) return;
 
-    final doc = pw.Document();
+    final pdf = pw.Document();
 
-    // Основной стиль
-    final titleStyle = pw.TextStyle(
-      fontSize: 20,
-      fontWeight: pw.FontWeight.bold,
-    );
-
-    final headerStyle = pw.TextStyle(
-      fontSize: 12,
-      fontWeight: pw.FontWeight.bold,
-    );
-
-    final cellStyle = pw.TextStyle(fontSize: 11);
-
-    // Создание страницы с таблицей
-    doc.addPage(
-      pw.MultiPage(
+    pdf.addPage(
+      pw.Page(
         pageFormat: PdfPageFormat.a4,
-        build: (context) => [
-          pw.Center(child: pw.Text('Отчёт по проектам', style: titleStyle)),
-          pw.SizedBox(height: 20),
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) {
+          final headers = ['Название', 'Срок', 'Статус', 'Оценка'];
 
-          pw.Table.fromTextArray(
-            headers: ['Название', 'Срок', 'Статус', 'Оценка'],
-            headerStyle: headerStyle,
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            cellStyle: cellStyle,
-            cellAlignment: pw.Alignment.centerLeft,
-            columnWidths: {
-              0: const pw.FlexColumnWidth(3),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(2),
-              3: const pw.FlexColumnWidth(1),
-            },
-            data: list.map((p) {
-              return [
-                p.title,
-                DateFormat('dd.MM.yyyy').format(p.deadline),
-                _statusRu(p.status),
-                p.grade?.toString() ?? '-',
-              ];
-            }).toList(),
-          ),
-        ],
+          final data = projects.map((p) {
+            return [
+              p.title,
+              DateFormat('dd.MM.yyyy').format(p.deadline),
+              _statusRu(p.status),
+              p.grade != null ? p.grade!.toStringAsFixed(1) : '-',
+            ];
+          }).toList();
+
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'Отчет по проектам учащихся',
+                style: pw.TextStyle(
+                  fontSize: 22,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 16),
+              pw.Text(
+                'Дата формирования: ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}',
+                style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Table.fromTextArray(
+                headers: headers,
+                data: data,
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 12,
+                ),
+                cellStyle: const pw.TextStyle(fontSize: 11),
+                border: pw.TableBorder.all(width: 0.5, color: PdfColors.grey600),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Всего проектов: ${projects.length}',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
 
-    // Печать
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => doc.save(),
-    );
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
   }
 
+  /// Перевод статуса проекта на русский язык
   String _statusRu(ProjectStatus status) {
     switch (status) {
       case ProjectStatus.planned:
@@ -71,6 +82,8 @@ class ReportService {
         return 'В работе';
       case ProjectStatus.completed:
         return 'Завершён';
+      default:
+        return 'Неизвестно';
     }
   }
 }

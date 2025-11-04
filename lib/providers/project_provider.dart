@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import '../models/project.dart';
-import '../services/supabase_project_repository.dart';
+import '../services/project_service.dart';
 
-/// Перечисления для фильтрации и сортировки
 enum ProjectFilter { all, inProgressOnly }
 enum SortBy { deadlineAsc, deadlineDesc, status }
 
 class ProjectProvider extends ChangeNotifier {
-  final SupabaseProjectRepository _repo;
-
+  final ProjectService _service;
   bool isGuest = false;
   bool isLoading = false;
 
@@ -18,35 +16,23 @@ class ProjectProvider extends ChangeNotifier {
   SortBy _sortBy = SortBy.deadlineAsc;
   ProjectFilter _filter = ProjectFilter.all;
 
-  /// Callback, вызывается при выходе пользователя
-  VoidCallback? onLogout;
-
-  ProjectProvider(this._repo, String? userId) {
+  ProjectProvider(this._service, String? userId) {
     initialize(userId: userId);
   }
 
-  /// Инициализация после логина/логаута
-  void initialize({required String? userId, VoidCallback? onLogout}) {
+  void initialize({required String? userId}) {
     _userId = userId;
     isGuest = userId == null || userId.isEmpty;
-    this.onLogout = onLogout;
-    _repo.updateOwner(_userId);
-
-    if (isGuest) {
-      // При входе в гостевой режим вызываем onLogout
-      _projects = [];
-      notifyListeners();
-      onLogout?.call();
-    } else {
-      fetchProjects();
-    }
+    _service.updateOwner(_userId);
+    fetchProjects();
   }
 
   List<Project> get view {
     List<Project> result = [..._projects];
 
     if (_filter == ProjectFilter.inProgressOnly) {
-      result = result.where((p) => p.status == ProjectStatus.inProgress).toList();
+      result =
+          result.where((p) => p.status == ProjectStatus.inProgress).toList();
     }
 
     switch (_sortBy) {
@@ -75,17 +61,14 @@ class ProjectProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _projects = await _repo.getAll();
+      _projects = await _service.getAll();
     } catch (e) {
+      debugPrint('Ошибка при загрузке проектов: $e');
       _projects = [];
     } finally {
       isLoading = false;
       notifyListeners();
     }
-  }
-
-  Future<void> refresh() async {
-    await fetchProjects();
   }
 
   void setSort(SortBy sortBy) {
@@ -98,32 +81,26 @@ class ProjectProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void resetFilters() {
-    _filter = ProjectFilter.all;
-    _sortBy = SortBy.deadlineAsc;
-    notifyListeners();
-  }
-
   Future<void> addProject(Project p) async {
     if (isGuest) return;
-    await _repo.add(p);
+    await _service.add(p);
     await fetchProjects();
   }
 
   Future<void> updateProject(Project p) async {
     if (isGuest) return;
-    await _repo.update(p);
+    await _service.update(p);
     await fetchProjects();
   }
 
   Future<void> deleteProject(String id) async {
     if (isGuest) return;
-    await _repo.delete(id);
+    await _service.delete(id);
     await fetchProjects();
   }
 
   Project createEmptyProject() {
     if (isGuest) throw Exception("Гость не может создавать проекты");
-    return _repo.createEmpty();
+    return _service.createEmpty();
   }
 }
