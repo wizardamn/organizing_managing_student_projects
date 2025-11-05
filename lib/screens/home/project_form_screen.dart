@@ -1,8 +1,12 @@
+// lib/screens/project_form_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/project.dart';
 import '../../providers/project_provider.dart';
 
@@ -22,28 +26,65 @@ class ProjectFormScreen extends StatefulWidget {
 
 class _ProjectFormScreenState extends State<ProjectFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  late Project _edited;
+
+  // поля формы (локальные)
+  late String _title;
+  late String _description;
+  late DateTime _deadline;
+  late ProjectStatus _status;
+  double? _grade;
+  late List<String> _attachments; // здесь храним публичные URL вложений
+  late List<String> _participants; // id участников
+
+  // список доступных пользователей (profiles) для выбора участников
+  List<Map<String, dynamic>> _allUsers = [];
+  bool _loadingUsers = false;
+
+  final ImagePicker _picker = ImagePicker();
+  final Uuid _uuid = const Uuid();
+
+  // имя bucket в Supabase Storage — поменяй если у тебя другое
+  static const String storageBucket = 'project-attachments';
 
   @override
   void initState() {
     super.initState();
-    _edited = Project(
-      id: widget.project.id,
-      title: widget.project.title,
-      description: widget.project.description,
-      deadline: widget.project.deadline,
-      status: widget.project.status,
-      ownerId: widget.project.ownerId,
-      attachments: List<String>.from(widget.project.attachments),
-      grade: widget.project.grade,
-      participants: List<String>.from(widget.project.participants),
-    );
+    // инициализация из переданного проекта
+    _title = widget.project.title;
+    _description = widget.project.description;
+    _deadline = widget.project.deadline;
+    _status = widget.project.status;
+    _grade = widget.project.grade;
+    _attachments = List<String>.from(widget.project.attachments);
+    _participants = List<String>.from(widget.project.participants);
+
+    // загружаем список всех пользователей (profiles) чтобы показывать их в выборе участников
+    _loadUsers();
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() => _loadingUsers = true);
+    try {
+      final res = await Supabase.instance.client
+          .from('profiles')
+          .select('id,full_name');
+      if (res != null && res is List) {
+        _allUsers = res.map<Map<String, dynamic>>((e) {
+          final map = Map<String, dynamic>.from(e as Map);
+          return {'id': map['id'] as String, 'full_name': map['full_name'] ?? ''};
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('Ошибка при загрузке пользователей: $e');
+    } finally {
+      if (mounted) setState(() => _loadingUsers = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final prov = context.read<ProjectProvider>();
-    final isReadOnly = _edited.status == ProjectStatus.completed;
+    final isReadOnly = _status == ProjectStatus.completed;
 
     return Scaffold(
       appBar: AppBar(
@@ -55,8 +96,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
           key: _formKey,
           child: ListView(
             children: [
+              // Название
               TextFormField(
-                initialValue: _edited.title,
+                initialValue: _title,
                 enabled: !isReadOnly,
                 decoration: const InputDecoration(
                   labelText: 'Название',
@@ -64,45 +106,49 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                 ),
                 validator: (v) =>
                 (v == null || v.trim().isEmpty) ? 'Введите название' : null,
-                onSaved: (v) => _edited.title = v!.trim(),
+                onSaved: (v) => _title = v!.trim(),
               ),
               const SizedBox(height: 12),
+
+              // Описание
               TextFormField(
-                initialValue: _edited.description,
+                initialValue: _description,
                 enabled: !isReadOnly,
                 decoration: const InputDecoration(
                   labelText: 'Описание',
                   border: OutlineInputBorder(),
                 ),
-                maxLines: 3,
-                onSaved: (v) => _edited.description = v?.trim() ?? '',
+                maxLines: 4,
+                onSaved: (v) => _description = v?.trim() ?? '',
               ),
               const SizedBox(height: 12),
+
+              // Дата дедлайна
               _DatePickerField(
-                initial: _edited.deadline,
-                onPicked: (d) => _edited.deadline = d,
+                initial: _deadline,
+                onPicked: (d) => _deadline = d,
                 enabled: !isReadOnly,
               ),
               const SizedBox(height: 12),
+
+              // Статус
               DropdownButtonFormField<ProjectStatus>(
-                value: _edited.status,
+                value: _status,
                 decoration: const InputDecoration(
                   labelText: 'Статус',
                   border: OutlineInputBorder(),
                 ),
                 items: ProjectStatus.values
-                    .map((s) => DropdownMenuItem(
-                  value: s,
-                  child: Text(_statusLabel(s)),
-                ))
+                    .map((s) =>
+                    DropdownMenuItem(value: s, child: Text(_statusLabel(s))))
                     .toList(),
-                onChanged: isReadOnly
-                    ? null
-                    : (v) => setState(() => _edited.status = v!),
+                onChanged: isReadOnly ? null : (v) => setState(() => _status = v!),
               ),
               const SizedBox(height: 12),
+
+              // Оценка
               TextFormField(
-                initialValue: _edited.grade?.toString() ?? '',
+                initialValue: _grade?.toString() ?? '',
                 enabled: !isReadOnly,
                 decoration: const InputDecoration(
                   labelText: 'Оценка (0–10)',
@@ -118,58 +164,114 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   }
                   return null;
                 },
-                onSaved: (v) => _edited.grade =
+                onSaved: (v) => _grade =
                 (v == null || v.isEmpty) ? null : double.parse(v),
               ),
               const SizedBox(height: 16),
-              Text('Вложения:',
-                  style: Theme.of(context).textTheme.titleMedium),
+
+              // Участники
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Участники', style: Theme.of(context).textTheme.titleMedium),
+                  TextButton.icon(
+                    icon: const Icon(Icons.person_add),
+                    label: const Text('Добавить/Изменить'),
+                    onPressed: _loadingUsers ? null : _showParticipantsPicker,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _participants.isEmpty
+                  ? const Text('Нет участников')
+                  : Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: _participants.map((id) {
+                  final u = _allUsers.firstWhere(
+                          (el) => el['id'] == id,
+                      orElse: () => {'id': id, 'full_name': id});
+                  return Chip(
+                    label: Text(u['full_name'] ?? id),
+                    onDeleted: isReadOnly
+                        ? null
+                        : () => setState(() => _participants.remove(id)),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+
+              // Вложения (показываем публичные URL или превью файлов)
+              Text('Вложения:', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  ..._edited.attachments.map(
-                        (path) => Stack(
-                      alignment: Alignment.topRight,
-                      children: [
-                        _Thumb(path: path),
-                        if (!isReadOnly)
-                          Positioned(
-                            right: -10,
-                            top: -10,
-                            child: IconButton(
-                              icon:
-                              const Icon(Icons.close, size: 18, color: Colors.red),
-                              onPressed: () => setState(() {
-                                _edited.attachments.remove(path);
-                              }),
-                            ),
+                  ..._attachments.map((url) => Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      _AttachmentThumb(url: url),
+                      if (!isReadOnly)
+                        Positioned(
+                          right: -8,
+                          top: -8,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                            onPressed: () => setState(() => _attachments.remove(url)),
                           ),
-                      ],
-                    ),
-                  ),
+                        ),
+                    ],
+                  )),
                   if (!isReadOnly)
                     IconButton(
                       icon: const Icon(Icons.attach_file),
-                      tooltip: 'Добавить фото',
-                      onPressed: _pickMedia,
+                      tooltip: 'Добавить и загрузить файлы',
+                      onPressed: _pickAndUploadAttachments,
                     ),
                 ],
               ),
               const SizedBox(height: 24),
+
+              // Кнопка Сохранить
               ElevatedButton(
                 onPressed: isReadOnly
                     ? null
                     : () async {
-                  if (_formKey.currentState!.validate()) {
-                    _formKey.currentState!.save();
+                  if (!_formKey.currentState!.validate()) return;
+                  _formKey.currentState!.save();
+
+                  // Собираем объект Project для сохранения.
+                  final idToUse = (widget.project.id.isNotEmpty)
+                      ? widget.project.id
+                      : _uuid.v4();
+
+                  final projectToSave = Project(
+                    id: idToUse,
+                    ownerId: widget.project.ownerId,
+                    title: _title,
+                    description: _description,
+                    deadline: _deadline,
+                    status: _status,
+                    grade: _grade,
+                    attachments: List<String>.from(_attachments),
+                    participants: List<String>.from(_participants),
+                    createdAt: widget.isNew ? DateTime.now() : widget.project.createdAt,
+                  );
+
+                  try {
                     if (widget.isNew) {
-                      await prov.addProject(_edited);
+                      await prov.addProject(projectToSave);
                     } else {
-                      await prov.updateProject(_edited);
+                      await prov.updateProject(projectToSave);
                     }
-                    if (mounted) Navigator.pop(context, true);
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Ошибка сохранения: $e')),
+                    );
                   }
                 },
                 child: const Text('Сохранить'),
@@ -181,17 +283,111 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     );
   }
 
-  Future<void> _pickMedia() async {
+  Future<void> _showParticipantsPicker() async {
+    // Модальное окно с чекбоксами для выбора участников
+    final selected = Set<String>.from(_participants);
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                Text('Выберите участников', style: Theme.of(context).textTheme.titleMedium),
+                const Divider(),
+                if (_loadingUsers) const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(),
+                ),
+                if (!_loadingUsers)
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _allUsers.length,
+                      itemBuilder: (context, i) {
+                        final u = _allUsers[i];
+                        final id = u['id'] as String;
+                        return CheckboxListTile(
+                          value: selected.contains(id),
+                          title: Text(u['full_name'] ?? id),
+                          onChanged: (v) {
+                            setState(() {
+                              if (v == true) selected.add(id);
+                              else selected.remove(id);
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // применяем выбор
+                      setState(() => _participants = selected.toList());
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Применить'),
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickAndUploadAttachments() async {
     try {
-      final picker = ImagePicker();
-      final List<XFile>? imgs = await picker.pickMultiImage();
-      if (imgs != null && imgs.isNotEmpty) {
-        setState(() {
-          _edited.attachments.addAll(imgs.map((x) => x.path));
-        });
+      final List<XFile>? picked = await _picker.pickMultiImage();
+      if (picked == null || picked.isEmpty) return;
+
+      // определяем id для пути: если проект уже имеет id используем его, иначе временно сгенерируем
+      final projectId = widget.project.id.isNotEmpty ? widget.project.id : _uuid.v4();
+
+      for (final xfile in picked) {
+        final file = File(xfile.path);
+        final ext = xfile.path.split('.').last;
+        final path = 'projects/$projectId/${_uuid.v4()}.$ext';
+
+        try {
+          // Загружаем файл в bucket
+          // NOTE: API supabase_flutter: storage.from(bucket).upload(path, file)
+          // В некоторых версиях метод принимает File, в некоторых — bytes.
+          final storage = Supabase.instance.client.storage.from(storageBucket);
+
+          // Попытка загрузки как File (чаще поддерживается)
+          await storage.upload(path, file);
+
+          // Формируем публичный URL (путь публичного объекта)
+          final publicUrl = '${Supabase.instance.client.supabaseUrl}/storage/v1/object/public/$storageBucket/$path';
+
+          setState(() {
+            _attachments.add(publicUrl);
+          });
+        } catch (e) {
+          debugPrint('Ошибка загрузки файла ${xfile.path}: $e');
+          // не прерываем весь цикл, переходим к следующему файлу
+        }
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Файлы загружены')),
+        );
       }
     } catch (e) {
-      debugPrint('Ошибка при выборе изображений: $e');
+      debugPrint('Ошибка при выборе/загрузке файлов: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ошибка при выборе/загрузке файлов')),
+        );
+      }
     }
   }
 
@@ -266,13 +462,19 @@ class _DatePickerFieldState extends State<_DatePickerField> {
   }
 }
 
-class _Thumb extends StatelessWidget {
-  const _Thumb({required this.path});
-  final String path;
+class _AttachmentThumb extends StatelessWidget {
+  const _AttachmentThumb({required this.url});
+  final String url;
 
   @override
   Widget build(BuildContext context) {
-    final file = File(path);
+    // Если url похоже на публичный URL - отображаем Image.network,
+    // Иначе показываем иконку.
+    final isImage = url.toLowerCase().endsWith('.jpg') ||
+        url.toLowerCase().endsWith('.jpeg') ||
+        url.toLowerCase().endsWith('.png') ||
+        url.toLowerCase().endsWith('.webp');
+
     return Container(
       width: 90,
       height: 90,
@@ -281,9 +483,9 @@ class _Thumb extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.hardEdge,
-      child: file.existsSync()
-          ? Image.file(file, fit: BoxFit.cover)
-          : const Icon(Icons.broken_image),
+      child: isImage
+          ? Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
+          : Center(child: const Icon(Icons.attach_file)),
     );
   }
 }

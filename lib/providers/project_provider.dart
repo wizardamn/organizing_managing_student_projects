@@ -7,10 +7,11 @@ enum SortBy { deadlineAsc, deadlineDesc, status }
 
 class ProjectProvider extends ChangeNotifier {
   final ProjectService _service;
+
   bool isGuest = false;
   bool isLoading = false;
-
   String? _userId;
+
   List<Project> _projects = [];
 
   SortBy _sortBy = SortBy.deadlineAsc;
@@ -27,12 +28,12 @@ class ProjectProvider extends ChangeNotifier {
     fetchProjects();
   }
 
+  /// Получение списка проектов с фильтрацией и сортировкой
   List<Project> get view {
     List<Project> result = [..._projects];
 
     if (_filter == ProjectFilter.inProgressOnly) {
-      result =
-          result.where((p) => p.status == ProjectStatus.inProgress).toList();
+      result = result.where((p) => p.status == ProjectStatus.inProgress).toList();
     }
 
     switch (_sortBy) {
@@ -50,6 +51,7 @@ class ProjectProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Загрузка проектов из Supabase
   Future<void> fetchProjects() async {
     if (isGuest) {
       _projects = [];
@@ -61,7 +63,8 @@ class ProjectProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _projects = await _service.getAll();
+      final data = await _service.getAll();
+      _projects = data;
     } catch (e) {
       debugPrint('Ошибка при загрузке проектов: $e');
       _projects = [];
@@ -99,8 +102,20 @@ class ProjectProvider extends ChangeNotifier {
     await fetchProjects();
   }
 
+  /// Создание нового пустого проекта
   Project createEmptyProject() {
     if (isGuest) throw Exception("Гость не может создавать проекты");
-    return _service.createEmpty();
+    return Project(
+      id: '', // создастся автоматически в Supabase
+      ownerId: _userId ?? '',
+      title: 'Новый проект',
+      description: '',
+      deadline: DateTime.now().add(const Duration(days: 7)),
+      status: ProjectStatus.planned,
+      grade: null,
+      attachments: const [],
+      participants: const [],
+      createdAt: DateTime.now(),
+    );
   }
 }

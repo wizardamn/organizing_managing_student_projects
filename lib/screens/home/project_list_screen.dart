@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+
 import '../../models/project.dart';
 import '../../providers/project_provider.dart';
 import 'project_form_screen.dart';
@@ -17,6 +18,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
   @override
   void initState() {
     super.initState();
+    // Загружаем проекты после первой отрисовки
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ProjectProvider>(context, listen: false).fetchProjects();
     });
@@ -48,39 +50,56 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
               PopupMenuItem(value: 'status', child: Text('По статусу')),
               PopupMenuDivider(),
               PopupMenuItem(value: 'all', child: Text('Все статусы')),
-              PopupMenuItem(value: 'inProgress', child: Text('Только "В работе"')),
+              PopupMenuItem(
+                  value: 'inProgress', child: Text('Только "В работе"')),
             ],
           ),
         ],
       ),
       drawer: const UserProfileDrawer(),
+
       body: prov.isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
         onRefresh: prov.fetchProjects,
         child: projects.isEmpty
-            ? const Center(child: Text('Нет проектов', style: TextStyle(fontSize: 16)))
+            ? const Center(
+          child: Text(
+            'Нет проектов',
+            style: TextStyle(fontSize: 16),
+          ),
+        )
             : ListView.builder(
           padding: const EdgeInsets.only(bottom: 80),
           itemCount: projects.length,
           itemBuilder: (context, index) {
             final p = projects[index];
             return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              margin: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 6),
               elevation: 3,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                title: Text(p.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                title: Text(
+                  p.title,
+                  style:
+                  const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Срок: ${DateFormat('dd.MM.yyyy').format(p.deadline)}'),
+                    Text(
+                        'Срок: ${DateFormat('dd.MM.yyyy').format(p.deadline)}'),
                     Text('Статус: ${_statusRu(p.status)}'),
                     if (p.participants.isNotEmpty)
-                      Text('Участники: ${p.participants.join(', ')}'),
+                      Text(
+                          'Участники: ${p.participants.join(', ')}'),
                     if (p.grade != null)
-                      Text('Оценка: ${p.grade!.toStringAsFixed(1)}'),
+                      Text(
+                          'Оценка: ${p.grade!.toStringAsFixed(1)}'),
                   ],
                 ),
                 trailing: PopupMenuButton<String>(
@@ -89,7 +108,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                       final updated = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ProjectFormScreen(project: p, isNew: false),
+                          builder: (_) => ProjectFormScreen(
+                              project: p, isNew: false),
                         ),
                       );
                       if (updated == true) await prov.fetchProjects();
@@ -98,8 +118,10 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                     }
                   },
                   itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Редактировать')),
-                    PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                    PopupMenuItem(
+                        value: 'edit', child: Text('Редактировать')),
+                    PopupMenuItem(
+                        value: 'delete', child: Text('Удалить')),
                   ],
                   icon: const Icon(Icons.more_vert),
                 ),
@@ -107,7 +129,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                   final updated = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => ProjectFormScreen(project: p, isNew: false),
+                      builder: (_) => ProjectFormScreen(
+                          project: p, isNew: false),
                     ),
                   );
                   if (updated == true) await prov.fetchProjects();
@@ -117,6 +140,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
           },
         ),
       ),
+
+      // Кнопка добавления проекта
       floatingActionButton: prov.isGuest
           ? null
           : FloatingActionButton(
@@ -125,7 +150,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
           final created = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => ProjectFormScreen(project: newProject, isNew: true),
+              builder: (_) =>
+                  ProjectFormScreen(project: newProject, isNew: true),
             ),
           );
           if (created == true) {
@@ -143,6 +169,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
     );
   }
 
+  // Перевод статусов на русский
   String _statusRu(ProjectStatus status) {
     switch (status) {
       case ProjectStatus.planned:
@@ -151,9 +178,12 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
         return 'В работе';
       case ProjectStatus.completed:
         return 'Завершён';
+      default:
+        return 'Неизвестно';
     }
   }
 
+  // Сортировка и фильтрация
   void _onSortFilter(String value, ProjectProvider prov) {
     switch (value) {
       case 'dAsc':
@@ -174,7 +204,9 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, ProjectProvider prov, String id) async {
+  // Подтверждение удаления проекта
+  Future<void> _confirmDelete(
+      BuildContext context, ProjectProvider prov, String id) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -187,7 +219,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style:
+            ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             child: const Text('Удалить'),
           ),
         ],

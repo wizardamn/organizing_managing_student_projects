@@ -4,74 +4,82 @@ enum ProjectStatus { planned, inProgress, completed }
 
 class Project {
   final String id;
-  String title;
-  String description;
-  DateTime deadline;
-  ProjectStatus status;
   final String ownerId;
-  List<String> attachments;
-  double? grade;
-  List<String> participants;
+  final String title;
+  final String description;
+  final DateTime deadline;
+  final ProjectStatus status;
+  final double? grade;
+  final List<String> attachments;
+  final DateTime createdAt;
+  final List<String> participants;
 
   Project({
     required this.id,
+    required this.ownerId,
     required this.title,
     required this.description,
     required this.deadline,
-    this.status = ProjectStatus.planned,
-    required this.ownerId,
-    this.attachments = const [],
+    required this.status,
     this.grade,
-    this.participants = const [],
+    required this.attachments,
+    required this.createdAt,
+    required this.participants,
   });
 
   factory Project.fromMap(Map<String, dynamic> map) {
-    // Supabase returns nested fields as maps or lists, handle carefully
-    final deadlineRaw = map['deadline'];
-    DateTime parsedDeadline;
-    if (deadlineRaw is String) {
-      parsedDeadline = DateTime.tryParse(deadlineRaw) ?? DateTime.now();
-    } else if (deadlineRaw is DateTime) {
-      parsedDeadline = deadlineRaw;
-    } else {
-      parsedDeadline = DateTime.now();
-    }
-
     return Project(
-      id: map['id'] as String,
-      title: (map['title'] ?? '') as String,
-      description: (map['description'] ?? '') as String,
-      deadline: parsedDeadline,
-      status: ProjectStatus.values[(map['status'] ?? 0) as int],
-      ownerId: (map['owner_id'] ?? '') as String,
-      attachments: List<String>.from(map['attachments'] ?? []),
+      id: map['id']?.toString() ?? const Uuid().v4(),
+      ownerId: map['owner_id']?.toString() ?? '',
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      deadline: map['deadline'] != null
+          ? DateTime.parse(map['deadline'].toString())
+          : DateTime.now(),
+      status: ProjectStatus.values[
+      (map['status'] ?? 0).clamp(0, ProjectStatus.values.length - 1)],
       grade: map['grade'] != null ? (map['grade'] as num).toDouble() : null,
-      participants: List<String>.from(map['participants'] ?? []),
+      attachments: (map['attachments'] as List?)
+          ?.map((e) => e.toString())
+          .toList() ??
+          [],
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'].toString())
+          : DateTime.now(),
+      participants: (map['participants'] as List?)
+          ?.map((e) => e.toString())
+          .toList() ??
+          [],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'owner_id': ownerId,
       'title': title,
       'description': description,
       'deadline': deadline.toIso8601String(),
       'status': status.index,
-      'owner_id': ownerId,
-      'attachments': attachments,
       'grade': grade,
+      'attachments': attachments,
+      'created_at': createdAt.toIso8601String(),
       'participants': participants,
     };
   }
 
-  static Project empty(String ownerId) {
+  factory Project.empty(String ownerId) {
     return Project(
       id: const Uuid().v4(),
+      ownerId: ownerId,
       title: '',
       description: '',
       deadline: DateTime.now().add(const Duration(days: 7)),
-      ownerId: ownerId,
-      participants: [ownerId],
+      status: ProjectStatus.planned,
+      grade: null,
+      attachments: [],
+      createdAt: DateTime.now(),
+      participants: [],
     );
   }
 }
