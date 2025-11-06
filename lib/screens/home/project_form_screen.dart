@@ -27,29 +27,25 @@ class ProjectFormScreen extends StatefulWidget {
 class _ProjectFormScreenState extends State<ProjectFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // поля формы (локальные)
   late String _title;
   late String _description;
   late DateTime _deadline;
   late ProjectStatus _status;
   double? _grade;
-  late List<String> _attachments; // здесь храним публичные URL вложений
-  late List<String> _participants; // id участников
+  late List<String> _attachments;
+  late List<String> _participants;
 
-  // список доступных пользователей (profiles) для выбора участников
   List<Map<String, dynamic>> _allUsers = [];
   bool _loadingUsers = false;
 
   final ImagePicker _picker = ImagePicker();
   final Uuid _uuid = const Uuid();
 
-  // имя bucket в Supabase Storage — поменяй если у тебя другое
   static const String storageBucket = 'project-attachments';
 
   @override
   void initState() {
     super.initState();
-    // инициализация из переданного проекта
     _title = widget.project.title;
     _description = widget.project.description;
     _deadline = widget.project.deadline;
@@ -57,8 +53,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     _grade = widget.project.grade;
     _attachments = List<String>.from(widget.project.attachments);
     _participants = List<String>.from(widget.project.participants);
-
-    // загружаем список всех пользователей (profiles) чтобы показывать их в выборе участников
     _loadUsers();
   }
 
@@ -67,17 +61,21 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     try {
       final res = await Supabase.instance.client
           .from('profiles')
-          .select('id,full_name');
-      if (res != null && res is List) {
-        _allUsers = res.map<Map<String, dynamic>>((e) {
-          final map = Map<String, dynamic>.from(e as Map);
-          return {'id': map['id'] as String, 'full_name': map['full_name'] ?? ''};
-        }).toList();
+          .select('id, full_name');
+
+      if (res is List) {
+        _allUsers = res
+            .map((e) => {
+          'id': e['id'] as String,
+          'full_name': e['full_name'] ?? '',
+        })
+            .toList();
       }
     } catch (e) {
       debugPrint('Ошибка при загрузке пользователей: $e');
     } finally {
-      if (mounted) setState(() => _loadingUsers = false);
+      if (!mounted) return;
+      setState(() => _loadingUsers = false);
     }
   }
 
@@ -96,7 +94,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              // Название
               TextFormField(
                 initialValue: _title,
                 enabled: !isReadOnly,
@@ -110,7 +107,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Описание
               TextFormField(
                 initialValue: _description,
                 enabled: !isReadOnly,
@@ -123,7 +119,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Дата дедлайна
               _DatePickerField(
                 initial: _deadline,
                 onPicked: (d) => _deadline = d,
@@ -131,7 +126,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Статус
               DropdownButtonFormField<ProjectStatus>(
                 value: _status,
                 decoration: const InputDecoration(
@@ -139,14 +133,16 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   border: OutlineInputBorder(),
                 ),
                 items: ProjectStatus.values
-                    .map((s) =>
-                    DropdownMenuItem(value: s, child: Text(_statusLabel(s))))
+                    .map((s) => DropdownMenuItem(
+                  value: s,
+                  child: Text(_statusLabel(s)),
+                ))
                     .toList(),
-                onChanged: isReadOnly ? null : (v) => setState(() => _status = v!),
+                onChanged:
+                isReadOnly ? null : (v) => setState(() => _status = v!),
               ),
               const SizedBox(height: 12),
 
-              // Оценка
               TextFormField(
                 initialValue: _grade?.toString() ?? '',
                 enabled: !isReadOnly,
@@ -164,19 +160,19 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   }
                   return null;
                 },
-                onSaved: (v) => _grade =
-                (v == null || v.isEmpty) ? null : double.parse(v),
+                onSaved: (v) =>
+                _grade = (v == null || v.isEmpty) ? null : double.parse(v),
               ),
               const SizedBox(height: 16),
 
-              // Участники
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Участники', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Участники',
+                      style: Theme.of(context).textTheme.titleMedium),
                   TextButton.icon(
                     icon: const Icon(Icons.person_add),
-                    label: const Text('Добавить/Изменить'),
+                    label: const Text('Добавить'),
                     onPressed: _loadingUsers ? null : _showParticipantsPicker,
                   ),
                 ],
@@ -188,21 +184,24 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                 spacing: 8,
                 runSpacing: 6,
                 children: _participants.map((id) {
-                  final u = _allUsers.firstWhere(
-                          (el) => el['id'] == id,
-                      orElse: () => {'id': id, 'full_name': id});
+                  final user = _allUsers.firstWhere(
+                        (el) => el['id'] == id,
+                    orElse: () => {'id': id, 'full_name': id},
+                  );
                   return Chip(
-                    label: Text(u['full_name'] ?? id),
+                    label: Text(user['full_name'] ?? id),
                     onDeleted: isReadOnly
                         ? null
-                        : () => setState(() => _participants.remove(id)),
+                        : () => setState(() {
+                      _participants.remove(id);
+                    }),
                   );
                 }).toList(),
               ),
               const SizedBox(height: 16),
 
-              // Вложения (показываем публичные URL или превью файлов)
-              Text('Вложения:', style: Theme.of(context).textTheme.titleMedium),
+              Text('Вложения:',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -217,8 +216,11 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                           right: -8,
                           top: -8,
                           child: IconButton(
-                            icon: const Icon(Icons.close, size: 18, color: Colors.red),
-                            onPressed: () => setState(() => _attachments.remove(url)),
+                            icon: const Icon(Icons.close,
+                                size: 18, color: Colors.red),
+                            onPressed: () {
+                              setState(() => _attachments.remove(url));
+                            },
                           ),
                         ),
                     ],
@@ -226,14 +228,13 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   if (!isReadOnly)
                     IconButton(
                       icon: const Icon(Icons.attach_file),
-                      tooltip: 'Добавить и загрузить файлы',
-                      onPressed: _pickAndUploadAttachments,
+                      tooltip: 'Добавить файлы',
+                      onPressed: _pickAndUploadAttachments, // ✅ исправлено
                     ),
                 ],
               ),
               const SizedBox(height: 24),
 
-              // Кнопка Сохранить
               ElevatedButton(
                 onPressed: isReadOnly
                     ? null
@@ -241,8 +242,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   if (!_formKey.currentState!.validate()) return;
                   _formKey.currentState!.save();
 
-                  // Собираем объект Project для сохранения.
-                  final idToUse = (widget.project.id.isNotEmpty)
+                  final idToUse = widget.project.id.isNotEmpty
                       ? widget.project.id
                       : _uuid.v4();
 
@@ -256,7 +256,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                     grade: _grade,
                     attachments: List<String>.from(_attachments),
                     participants: List<String>.from(_participants),
-                    createdAt: widget.isNew ? DateTime.now() : widget.project.createdAt,
+                    createdAt: widget.isNew
+                        ? DateTime.now()
+                        : widget.project.createdAt,
                   );
 
                   try {
@@ -265,10 +267,10 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                     } else {
                       await prov.updateProject(projectToSave);
                     }
-                    if (!mounted) return;
+                    if (!context.mounted) return;
                     Navigator.pop(context, true);
                   } catch (e) {
-                    if (!mounted) return;
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Ошибка сохранения: $e')),
                     );
@@ -284,8 +286,8 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   }
 
   Future<void> _showParticipantsPicker() async {
-    // Модальное окно с чекбоксами для выбора участников
     final selected = Set<String>.from(_participants);
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -297,13 +299,15 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 8),
-                Text('Выберите участников', style: Theme.of(context).textTheme.titleMedium),
+                Text('Выберите участников',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const Divider(),
-                if (_loadingUsers) const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: CircularProgressIndicator(),
-                ),
-                if (!_loadingUsers)
+                if (_loadingUsers)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(),
+                  )
+                else
                   Flexible(
                     child: ListView.builder(
                       shrinkWrap: true,
@@ -316,8 +320,11 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                           title: Text(u['full_name'] ?? id),
                           onChanged: (v) {
                             setState(() {
-                              if (v == true) selected.add(id);
-                              else selected.remove(id);
+                              if (v == true) {
+                                selected.add(id);
+                              } else {
+                                selected.remove(id);
+                              }
                             });
                           },
                         );
@@ -328,7 +335,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   padding: const EdgeInsets.all(12.0),
                   child: ElevatedButton(
                     onPressed: () {
-                      // применяем выбор
                       setState(() => _participants = selected.toList());
                       Navigator.pop(ctx);
                     },
@@ -343,53 +349,48 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     );
   }
 
+  /// ✅ Исправленный метод: без `dotenv`, берёт URL прямо из Supabase config
   Future<void> _pickAndUploadAttachments() async {
     try {
       final List<XFile>? picked = await _picker.pickMultiImage();
       if (picked == null || picked.isEmpty) return;
 
-      // определяем id для пути: если проект уже имеет id используем его, иначе временно сгенерируем
       final projectId = widget.project.id.isNotEmpty ? widget.project.id : _uuid.v4();
+      final client = Supabase.instance.client;
 
       for (final xfile in picked) {
         final file = File(xfile.path);
         final ext = xfile.path.split('.').last;
         final path = 'projects/$projectId/${_uuid.v4()}.$ext';
+        final storage = client.storage.from(storageBucket);
 
         try {
-          // Загружаем файл в bucket
-          // NOTE: API supabase_flutter: storage.from(bucket).upload(path, file)
-          // В некоторых версиях метод принимает File, в некоторых — bytes.
-          final storage = Supabase.instance.client.storage.from(storageBucket);
-
-          // Попытка загрузки как File (чаще поддерживается)
+          // Загружаем файл
           await storage.upload(path, file);
 
-          // Формируем публичный URL (путь публичного объекта)
-          final publicUrl = '${Supabase.instance.client.supabaseUrl}/storage/v1/object/public/$storageBucket/$path';
+          // Получаем публичный URL правильно через getPublicUrl()
+          final publicUrl = storage.getPublicUrl(path);
 
           setState(() {
             _attachments.add(publicUrl);
           });
         } catch (e) {
-          debugPrint('Ошибка загрузки файла ${xfile.path}: $e');
-          // не прерываем весь цикл, переходим к следующему файлу
+          debugPrint('Ошибка загрузки файла: $e');
         }
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Файлы загружены')),
-        );
-      }
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Файлы загружены')),
+      );
     } catch (e) {
-      debugPrint('Ошибка при выборе/загрузке файлов: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ошибка при выборе/загрузке файлов')),
-        );
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка загрузки файлов: $e')),
+      );
     }
   }
+
 
   String _statusLabel(ProjectStatus s) {
     switch (s) {
@@ -468,8 +469,6 @@ class _AttachmentThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Если url похоже на публичный URL - отображаем Image.network,
-    // Иначе показываем иконку.
     final isImage = url.toLowerCase().endsWith('.jpg') ||
         url.toLowerCase().endsWith('.jpeg') ||
         url.toLowerCase().endsWith('.png') ||
@@ -484,8 +483,13 @@ class _AttachmentThumb extends StatelessWidget {
       ),
       clipBehavior: Clip.hardEdge,
       child: isImage
-          ? Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
-          : Center(child: const Icon(Icons.attach_file)),
+          ? Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+        const Icon(Icons.broken_image, color: Colors.grey),
+      )
+          : const Center(child: Icon(Icons.attach_file)),
     );
   }
 }
