@@ -1,13 +1,12 @@
-// lib/services/report_service.dart
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
-import '../models/project.dart';
+import '../models/project_model.dart';
 
 class ReportService {
   /// Генерация PDF-отчета по списку проектов и вывод на печать/просмотр
-  Future<void> generateAndPrint(List<Project> projects) async {
+  Future<void> generateAndPrint(List<ProjectModel> projects) async {
     if (projects.isEmpty) return;
 
     final pdf = pw.Document();
@@ -23,7 +22,8 @@ class ReportService {
             return [
               p.title,
               DateFormat('dd.MM.yyyy').format(p.deadline),
-              _statusRu(p.status),
+              // ✅ ИСПОЛЬЗУЕМ ProjectModel.statusEnum
+              _statusRu(p.statusEnum),
               p.grade != null ? p.grade!.toStringAsFixed(1) : '-',
             ];
           }).toList();
@@ -74,6 +74,7 @@ class ReportService {
   }
 
   /// Перевод статуса проекта на русский язык
+  // ✅ ИСПРАВЛЕНО: Принимает ProjectStatus (enum) и обрабатывает все кейсы
   String _statusRu(ProjectStatus status) {
     switch (status) {
       case ProjectStatus.planned:
@@ -82,8 +83,8 @@ class ReportService {
         return 'В работе';
       case ProjectStatus.completed:
         return 'Завершён';
-      default:
-        return 'Неизвестно';
+      case ProjectStatus.archived: // ✅ ДОБАВЛЕН КЕЙС
+        return 'Архивирован';
     }
   }
 }

@@ -1,22 +1,25 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/profile_model.dart';
-import 'supabase_service.dart';
 
 class AuthService {
-  final SupabaseClient _client = SupabaseService.client;
+  final SupabaseClient _client = Supabase.instance.client;
+
+  // 💡 ПРИМЕЧАНИЕ: Это должен быть ваш фактический URL редиректа
+  final String _emailRedirectTo = 'https://yqcywpkkdwkmqposwyoz.supabase.co/auth/v1/callback';
 
   /// Регистрация нового пользователя с созданием записи в таблице profiles.
   /// Возвращает true, если регистрация прошла успешно.
   Future<bool> signUp(String email, String password, String fullName, String role) async {
     try {
+      // ✅ ИСПРАВЛЕНО: Передаем 'data' и 'emailRedirectTo' напрямую в signUp
       final response = await _client.auth.signUp(
         email: email,
         password: password,
-        data: {
+        data: { // Метаданные пользователя для Supabase Auth
           'full_name': fullName,
           'role': role,
         },
-        emailRedirectTo: 'https://yqcywpkkdwkmqposwyoz.supabase.co/auth/v1/callback',
+        emailRedirectTo: _emailRedirectTo,
       );
 
       final user = response.user;
@@ -77,7 +80,8 @@ class AuthService {
           .maybeSingle();
 
       if (data == null) return null;
-      return ProfileModel.fromJson(data);
+      // ✅ Передаем полный объект user в ProfileModel.fromJson
+      return ProfileModel.fromJson(data, user);
     } catch (e) {
       throw Exception('Ошибка при загрузке профиля: $e');
     }

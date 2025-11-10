@@ -40,7 +40,8 @@ Future<void> main() async {
           ChangeNotifierProvider(
             create: (_) => ProjectProvider(
               ProjectService(),
-              currentUser?.id,
+              // ✅ ИСПРАВЛЕНИЕ: Передаем ID пользователя как именованный аргумент
+              userId: currentUser?.id,
             ),
           ),
         ],

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
+
 import '../../providers/project_provider.dart';
-import '../../models/project.dart';
+// ✅ ИСПРАВЛЕНИЕ 1: Используем ProjectModel
+import '../../models/project_model.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -20,7 +22,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     final prov = context.watch<ProjectProvider>();
 
-    // Исправлено: используем prov.view (текущий список проектов)
+    // ✅ ИСПРАВЛЕНИЕ 2: Используем List<ProjectModel>
     final events = _groupProjectsByDate(prov.view);
 
     return Scaffold(
@@ -39,6 +41,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 _focusedDay = focused;
               });
             },
+            // ✅ ИСПРАВЛЕНИЕ 3: eventLoader использует List<ProjectModel>
             eventLoader: (day) => events[DateUtils.dateOnly(day)] ?? [],
             calendarStyle: const CalendarStyle(
               todayDecoration: BoxDecoration(
@@ -59,6 +62,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           Expanded(
             child: _selectedDay == null
                 ? const Center(child: Text('Выберите дату'))
+            // ✅ ИСПРАВЛЕНИЕ 4: _buildEventList использует List<ProjectModel>
                 : _buildEventList(events[DateUtils.dateOnly(_selectedDay!)] ?? []),
           ),
         ],
@@ -67,8 +71,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   /// Группировка проектов по дате дедлайна
-  Map<DateTime, List<Project>> _groupProjectsByDate(List<Project> projects) {
-    final Map<DateTime, List<Project>> data = {};
+  // ✅ ИСПРАВЛЕНИЕ 5: Используем ProjectModel в сигнатуре и теле
+  Map<DateTime, List<ProjectModel>> _groupProjectsByDate(List<ProjectModel> projects) {
+    final Map<DateTime, List<ProjectModel>> data = {};
     for (final project in projects) {
       final date = DateUtils.dateOnly(project.deadline);
       data.putIfAbsent(date, () => []);
@@ -78,7 +83,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   /// Список проектов для выбранного дня
-  Widget _buildEventList(List<Project> projects) {
+  // ✅ ИСПРАВЛЕНИЕ 6: Используем List<ProjectModel>
+  Widget _buildEventList(List<ProjectModel> projects) {
     if (projects.isEmpty) {
       return const Center(child: Text('На этот день нет проектов'));
     }
@@ -92,7 +98,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           leading: const Icon(Icons.assignment, color: Colors.blue),
           title: Text(p.title, style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text(
-            'Дедлайн: ${DateFormat('dd.MM.yyyy').format(p.deadline)}\nСтатус: ${p.status.name}',
+            // ✅ ИСПРАВЛЕНИЕ 7: Используем p.statusEnum.text
+            'Дедлайн: ${DateFormat('dd.MM.yyyy').format(p.deadline)}\nСтатус: ${p.statusEnum.text}',
           ),
           onTap: () => _showProjectDetails(context, p),
         );
@@ -101,7 +108,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   /// Диалог с подробностями проекта
-  void _showProjectDetails(BuildContext context, Project project) {
+  // ✅ ИСПРАВЛЕНИЕ 8: Используем ProjectModel
+  void _showProjectDetails(BuildContext context, ProjectModel project) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -110,9 +118,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Описание: ${project.description ?? "Нет"}'),
+            // 💡 ПРИМЕЧАНИЕ: description не может быть null в ProjectModel
+            Text('Описание: ${project.description.isEmpty ? "Нет" : project.description}'),
             const SizedBox(height: 8),
-            Text('Статус: ${project.status.name}'),
+            // ✅ ИСПРАВЛЕНИЕ 9: Используем p.statusEnum.text
+            Text('Статус: ${project.statusEnum.text}'),
             Text('Дедлайн: ${DateFormat('dd.MM.yyyy').format(project.deadline)}'),
           ],
         ),

@@ -1,25 +1,33 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 class ProfileModel {
   final String id;
   final String fullName;
   final String role;
   final DateTime createdAt;
+  final String email;
 
   ProfileModel({
     required this.id,
     required this.fullName,
     required this.role,
     required this.createdAt,
+    required this.email,
   });
 
-  /// Фабричный конструктор для создания модели из JSON (например, из Supabase)
-  factory ProfileModel.fromJson(Map<String, dynamic> json) {
+  /// Фабричный конструктор для создания модели из данных 'profiles'.
+  /// Требует объект User для получения email.
+  factory ProfileModel.fromJson(Map<String, dynamic> json, User user) {
     return ProfileModel(
       id: json['id'].toString(),
-      fullName: json['full_name'] ?? '',
-      role: json['role'] ?? 'student',
+      // Берем имя из БД, fallback на email
+      fullName: json['full_name'] as String? ?? user.email?.split('@').first ?? 'Неизвестно',
+      role: json['role'] as String? ?? 'student',
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
+      // Email берется из объекта User
+      email: user.email ?? 'email-not-found@example.com',
     );
   }
 
@@ -31,20 +39,5 @@ class ProfileModel {
       'role': role,
       'created_at': createdAt.toIso8601String(),
     };
-  }
-
-  /// Создание копии с возможностью изменения отдельных полей
-  ProfileModel copyWith({
-    String? id,
-    String? fullName,
-    String? role,
-    DateTime? createdAt,
-  }) {
-    return ProfileModel(
-      id: id ?? this.id,
-      fullName: fullName ?? this.fullName,
-      role: role ?? this.role,
-      createdAt: createdAt ?? this.createdAt,
-    );
   }
 }

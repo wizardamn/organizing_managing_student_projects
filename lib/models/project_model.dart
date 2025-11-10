@@ -1,13 +1,59 @@
+import 'package:flutter/material.dart';
+
+// ----------------------------------------------------------------------
+// ✅ ENUM: СТАТУС ПРОЕКТА
+// ----------------------------------------------------------------------
+enum ProjectStatus {
+  planned, // 0
+  inProgress, // 1
+  completed, // 2
+  archived, // 3
+}
+
+// ----------------------------------------------------------------------
+// ✅ РАСШИРЕНИЕ ДЛЯ ОТОБРАЖЕНИЯ СТАТУСА И ЦВЕТА
+// ----------------------------------------------------------------------
+extension ProjectStatusExtension on ProjectStatus {
+  String get text {
+    switch (this) {
+      case ProjectStatus.planned:
+        return 'Запланирован';
+      case ProjectStatus.inProgress:
+        return 'В работе';
+      case ProjectStatus.completed:
+        return 'Завершён';
+      case ProjectStatus.archived:
+        return 'Архив';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case ProjectStatus.planned:
+        return Colors.blueGrey;
+      case ProjectStatus.inProgress:
+        return Colors.blue;
+      case ProjectStatus.completed:
+        return Colors.green;
+      case ProjectStatus.archived:
+        return Colors.brown;
+    }
+  }
+}
+
+// ----------------------------------------------------------------------
+// ✅ МОДЕЛЬ ПРОЕКТА
+// ----------------------------------------------------------------------
 class ProjectModel {
   final String id;
   final String ownerId;
   final String title;
   final String description;
   final DateTime deadline;
-  final int status; // можно позже заменить на enum ProjectStatus
+  final int status; // Хранится как индекс enum для Supabase
   final double? grade;
-  final List<String> attachments;
   final List<String> participants;
+  final List<String> attachments;
   final DateTime createdAt;
 
   ProjectModel({
@@ -18,79 +64,60 @@ class ProjectModel {
     required this.deadline,
     required this.status,
     this.grade,
-    this.attachments = const [],
-    this.participants = const [],
+    required this.participants,
+    required this.attachments,
     required this.createdAt,
   });
 
-  /// Фабричный конструктор для создания модели из JSON (например, Supabase)
+  // Геттер для удобного доступа к статусу как к enum
+  ProjectStatus get statusEnum => ProjectStatus.values[status];
+
+  // ------------------------------------------------
+  // ✅ FROM JSON (Десериализация из Supabase)
+  // ------------------------------------------------
   factory ProjectModel.fromJson(Map<String, dynamic> json) {
+    // Безопасное получение списка участников/вложений
+    List<String> parseStringList(dynamic value) {
+      if (value is List) {
+        return value.map((e) => e.toString()).toList();
+      }
+      return [];
+    }
+
     return ProjectModel(
-      id: json['id'].toString(),
-      ownerId: json['owner_id']?.toString() ?? '',
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      deadline: json['deadline'] != null
-          ? DateTime.parse(json['deadline'])
-          : DateTime.now(),
-      status: json['status'] is int
-          ? json['status']
-          : int.tryParse(json['status'].toString()) ?? 0,
-      grade: json['grade'] != null
-          ? double.tryParse(json['grade'].toString())
-          : null,
-      attachments: (json['attachments'] is List)
-          ? List<String>.from(json['attachments'])
-          : [],
-      participants: (json['participants'] is List)
-          ? List<String>.from(json['participants'])
-          : [],
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : DateTime.now(),
+      id: json['id'] as String,
+      ownerId: json['owner_id'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String? ?? '',
+      // Преобразование строки ISO в DateTime
+      deadline: DateTime.parse(json['deadline'] as String).toLocal(),
+      createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
+      // Статус должен быть int
+      status: json['status'] as int? ?? ProjectStatus.planned.index,
+      grade: json['grade'] as double?,
+      participants: parseStringList(json['participants']),
+      attachments: parseStringList(json['attachments']),
     );
   }
 
-  /// Преобразование модели обратно в JSON
+  // ------------------------------------------------
+  // ✅ TO JSON (Сериализация для Supabase)
+  // ------------------------------------------------
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
+      // ID не включается при добавлении, но нужен при обновлении
+      if (id.isNotEmpty) 'id': id,
       'owner_id': ownerId,
       'title': title,
       'description': description,
-      'deadline': deadline.toIso8601String(),
+      // Сохраняем в UTC для базы данных
+      'deadline': deadline.toUtc().toIso8601String(),
       'status': status,
       'grade': grade,
-      'attachments': attachments,
       'participants': participants,
-      'created_at': createdAt.toIso8601String(),
+      'attachments': attachments,
+      // 'created_at' обычно устанавливается БД, но может быть полезен при создании
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
-  }
-
-  /// Метод для создания копии с изменёнными полями
-  ProjectModel copyWith({
-    String? id,
-    String? ownerId,
-    String? title,
-    String? description,
-    DateTime? deadline,
-    int? status,
-    double? grade,
-    List<String>? attachments,
-    List<String>? participants,
-    DateTime? createdAt,
-  }) {
-    return ProjectModel(
-      id: id ?? this.id,
-      ownerId: ownerId ?? this.ownerId,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      deadline: deadline ?? this.deadline,
-      status: status ?? this.status,
-      grade: grade ?? this.grade,
-      attachments: attachments ?? this.attachments,
-      participants: participants ?? this.participants,
-      createdAt: createdAt ?? this.createdAt,
-    );
   }
 }

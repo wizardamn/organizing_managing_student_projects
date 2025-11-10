@@ -8,11 +8,28 @@ class LoginWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
-    final user = session?.user;
-    if (user != null && user.email != null) {
-      return const ProjectListScreen();
-    }
-    return const LoginScreen();
+    // ✅ Используем StreamBuilder для подписки на изменения состояния аутентификации
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          // Показываем загрузку при первом подключении или смене состояния
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final event = snapshot.data?.event;
+        final session = snapshot.data?.session;
+
+        // Если есть активная сессия, пользователь авторизован.
+        if (session != null && session.user != null) {
+          // 💡 ProjectProvider должен быть настроен на обработку этого события (AUTH_STATE_CHANGED)
+          // и автоматическую загрузку данных.
+          return const ProjectListScreen();
+        }
+
+        // Если нет сессии или произошел SIGN_OUT
+        return const LoginScreen();
+      },
+    );
   }
 }

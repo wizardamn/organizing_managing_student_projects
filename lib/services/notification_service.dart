@@ -15,6 +15,7 @@ class NotificationService {
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     final iosInit = DarwinInitializationSettings(
+      // Разрешения запрашиваются здесь
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
@@ -77,6 +78,7 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    // Установка местного часового пояса (tz.local) для планового уведомления
     await _plugin.zonedSchedule(
       id,
       title,
@@ -99,10 +101,7 @@ class NotificationService {
     await _plugin.cancelAll();
   }
 
-  /// Запрос разрешений на уведомления (особенно важно для iOS)
-  Future<void> requestPermissions() async {
-    await _plugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
-  }
+// ❌ Метод requestPermissions удален, так как он требовал
+// импорта приватных типов (IOSFlutterLocalNotificationsPlugin)
+// и разрешения уже запрашиваются в DarwinInitializationSettings.
 }
