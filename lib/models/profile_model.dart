@@ -18,11 +18,15 @@ class ProfileModel {
   /// Фабричный конструктор для создания модели из данных 'profiles'.
   /// Требует объект User для получения email.
   factory ProfileModel.fromJson(Map<String, dynamic> json, User user) {
+    // ✅ ИСПРАВЛЕНИЕ: Получаем роль из БД. Если нет в БД, берем из метаданных Auth.
+    final String profileRole = json['role'] as String? ?? user.userMetadata?['role'] as String? ?? 'student';
+
     return ProfileModel(
       id: json['id'].toString(),
-      // Берем имя из БД, fallback на email
-      fullName: json['full_name'] as String? ?? user.email?.split('@').first ?? 'Неизвестно',
-      role: json['role'] as String? ?? 'student',
+      // Берем имя из БД, fallback на имя из метаданных, затем email
+      fullName: json['full_name'] as String? ?? user.userMetadata?['full_name'] as String? ?? user.email?.split('@').first ?? 'Неизвестно',
+      // ✅ Используем роль, полученную из БД или метаданных
+      role: profileRole,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),

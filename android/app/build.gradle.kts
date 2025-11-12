@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.organizing_managing_student_projects"
+    namespace = "com.example.Taskio"
     compileSdk = 35 // Можно заменить на flutter.compileSdkVersion, если используете переменные из Flutter
 
     ndkVersion = "29.0.13599879" // Новейшая стабильная версия, которую вы используете
 
     defaultConfig {
-        applicationId = "com.example.organizing_managing_student_projects"
+        applicationId = "com.example.Taskio"
         minSdk = 23 // Обязательно не ниже 23, так требует firebase-auth
         targetSdk = 35 // Соответствует compileSdk
         versionCode = 1
@@ -25,7 +25,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
 
     buildTypes {

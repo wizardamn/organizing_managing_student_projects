@@ -28,6 +28,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   easy_localization: ^3.0.0
   file_picker: ^8.1.2
+  flutter_launcher_icons: ^0.13.1
   # Notifications
   flutter_local_notifications: ^17.0.0
   timezone: ^0.9.4
@@ -52,3 +53,9 @@ flutter:
   assets:
     - .env
     - assets/lang/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/taskio_icon.png"
+  min_sdk_android: 23

@@ -4,11 +4,18 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+// ✅ Провайдеры
+import 'providers/auth_provider.dart';
 import 'providers/project_provider.dart';
 import 'providers/theme_provider.dart';
+
+// ✅ Сервисы
 import 'services/project_service.dart';
+
+// ✅ Экраны
 import 'screens/auth/login_wrapper.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/home/project_list_screen.dart'; // ✅ Главный экран
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,8 +34,6 @@ Future<void> main() async {
     anonKey: supabaseAnonKey,
   );
 
-  final currentUser = Supabase.instance.client.auth.currentUser;
-
   runApp(
     EasyLocalization(
       supportedLocales: const [Locale('ru'), Locale('en')],
@@ -37,11 +42,11 @@ Future<void> main() async {
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => AuthProvider()),
           ChangeNotifierProvider(
             create: (_) => ProjectProvider(
               ProjectService(),
-              // ✅ ИСПРАВЛЕНИЕ: Передаем ID пользователя как именованный аргумент
-              userId: currentUser?.id,
+              // ❌ УДАЛЯЕМ userId: currentUser?.id из конструктора
             ),
           ),
         ],
@@ -68,8 +73,11 @@ class StudentProjectsApp extends StatelessWidget {
       supportedLocales: context.supportedLocales,
       locale: context.locale,
       routes: {
+        // ✅ Определяем маршруты для навигации
         '/login': (_) => const LoginScreen(),
+        '/home': (_) => const ProjectListScreen(),
       },
+      // ✅ LoginWrapper - это точка входа, которая решает, куда идти
       home: const LoginWrapper(),
     );
   }

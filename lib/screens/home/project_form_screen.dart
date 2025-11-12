@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart'; // ✅ НОВЫЙ ИМПОРТ
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,10 +8,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../models/project_model.dart';
 import '../../providers/project_provider.dart';
-
-// ❌ УДАЛЕНО ДУБЛИРУЮЩЕЕСЯ РАСШИРЕНИЕ:
-// extension ProjectStatusExtension on ProjectStatus { ... }
-// Оно должно быть определено только в project_model.dart
 
 class ProjectFormScreen extends StatefulWidget {
   final ProjectModel project;
@@ -38,12 +34,13 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   late List<String> _attachments;
   late List<String> _participants;
 
-  final ImagePicker _picker = ImagePicker();
+  // ❌ УДАЛЕН ImagePicker _picker = ImagePicker();
   final Uuid _uuid = const Uuid();
 
   List<Map<String, dynamic>> _users = [];
 
-  static const String bucket = 'project-attachments';
+  // ✅ ИМЯ БАКЕТА
+  static const String bucket = 'project-files';
 
   @override
   void initState() {
@@ -52,7 +49,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     _title = widget.project.title;
     _description = widget.project.description;
     _deadline = widget.project.deadline;
-    // ✅ ИСПРАВЛЕНО: Используем геттер statusEnum
     _status = widget.project.statusEnum;
     _grade = widget.project.grade;
     _attachments = List.from(widget.project.attachments);
@@ -61,6 +57,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     _loadUsers();
   }
 
+  // ... (Функция _loadUsers остается без изменений)
   Future<void> _loadUsers() async {
     try {
       final res = await Supabase.instance.client
@@ -77,9 +74,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     }
   }
 
-  // ============================
-  //   Выбор участника из списка
-  // ============================
+  // ... (Функция _selectParticipants остается без изменений)
   Future<void> _selectParticipants() async {
     if (_users.isEmpty) return;
 
@@ -101,7 +96,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                 child: ListView(
                   children: _users.map((u) {
                     final id = u['id'];
-                    // 💡 ИСПРАВЛЕНИЕ: Предотвращаем добавление самого себя в участники.
                     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
 
                     // Участник не может выбрать себя (если это не новая запись)
@@ -147,26 +141,35 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   }
 
   // ============================
-  //       Загрузка вложений
+  //  ✅ ИСПРАВЛЕННАЯ: Загрузка вложений
   // ============================
   Future<void> _pickAttachment() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
+    // ✅ Используем FilePicker для выбора ЛЮБЫХ файлов
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx', 'mp3', 'mp4', 'zip'],
+    );
+
+    // Проверка, что файл выбран
+    if (result == null || result.files.single.path == null) return;
     if (!mounted) return;
 
-    final file = File(picked.path);
-    final fileId = _uuid.v4();
-    // 💡 ИСПРАВЛЕНИЕ: Корректное получение расширения
-    final fileExt = picked.path.split('.').last.toLowerCase();
+    final pickedFile = result.files.single;
+    final file = File(pickedFile.path!);
 
-    final fileName = "${fileId}_${widget.project.id}.$fileExt"; // Используем ID проекта для уникальности
+    final fileId = _uuid.v4();
+    // ✅ Корректное получение расширения
+    final fileExt = pickedFile.extension?.toLowerCase() ?? 'bin';
+
+    // Уникальное имя файла: [UUID]_[ID проекта].[расширение]
+    final fileName = "${fileId}_${widget.project.id}.$fileExt";
 
     try {
       final storage = Supabase.instance.client.storage.from(bucket);
 
-      // 💡 ДОБАВЛЕНИЕ: Отображение прогресса или лоадера
+      // Отображение прогресса или лоадера
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Загрузка файла...')),
+        SnackBar(content: Text('Загрузка файла ${pickedFile.name}...')),
       );
 
       // Загрузка файла
@@ -196,9 +199,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     }
   }
 
-  // ============================
-  //       Сохранение проекта
-  // ============================
+  // ... (Функция _saveProject остается без изменений)
   Future<void> _saveProject() async {
     if (!mounted || !_formKey.currentState!.validate()) return;
 
@@ -207,7 +208,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     final user = Supabase.instance.client.auth.currentUser;
 
     final projectModel = ProjectModel(
-      id: widget.project.id.isNotEmpty ? widget.project.id : const Uuid().v4(), // 💡 ИСПРАВЛЕНИЕ: Если ID пустой (новый проект), генерируем новый
+      id: widget.project.id.isNotEmpty ? widget.project.id : const Uuid().v4(),
       title: _title,
       description: _description,
       ownerId: widget.project.ownerId.isEmpty
@@ -248,7 +249,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 💡 Оставляем лоадер, если список пользователей еще не загружен
     if (_users.isEmpty) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -306,7 +306,6 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                     .map(
                       (s) => DropdownMenuItem(
                     value: s,
-                    // ✅ ИСПРАВЛЕНО: Используем геттер .text из Extension
                     child: Text(s.text),
                   ),
                 )
@@ -353,12 +352,12 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                       url: a,
                       onDelete: () async {
                         setState(() => _attachments.remove(a));
-                        // 💡 ДОБАВЛЕНИЕ: Логика удаления файла из Storage
                         await _deleteAttachment(a);
                       },
                     ),
                   IconButton(
-                    icon: const Icon(Icons.add_a_photo_outlined),
+                    // ✅ Иконка "Вложение" более уместна
+                    icon: const Icon(Icons.attach_file),
                     onPressed: _pickAttachment,
                   ),
                 ],
@@ -423,7 +422,7 @@ class DatePickerField extends StatelessWidget {
 }
 
 // ================================
-//   Превью вложения
+// ✅ ИСПРАВЛЕННЫЙ: Превью вложения
 // ================================
 class AttachmentThumb extends StatelessWidget {
   final String url;
@@ -435,27 +434,60 @@ class AttachmentThumb extends StatelessWidget {
     required this.onDelete,
   });
 
+  // Вспомогательная функция для определения типа файла
+  IconData _getIconForFile(String url) {
+    final extension = url.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'mp3':
+        return Icons.music_note;
+      case 'mp4':
+        return Icons.movie;
+      case 'zip':
+      case 'rar':
+        return Icons.folder_zip;
+      default:
+      // Если это не изображение и не известный тип, показываем общий файл
+        return Icons.insert_drive_file;
+    }
+  }
+
+  // Вспомогательная функция для проверки, является ли файл изображением
+  bool _isImage(String url) {
+    final extension = url.split('.').last.toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(extension);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isImage = _isImage(url);
+    const size = 90.0;
+
+    Widget content;
+
+    if (isImage) {
+      // Для изображений показываем Image.network
+      content = Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(context, Icons.broken_image, size),
+      );
+    } else {
+      // Для остальных файлов показываем иконку
+      content = _buildPlaceholder(context, _getIconForFile(url), size, isImage: false);
+    }
+
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            url,
-            width: 90,
-            height: 90,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.broken_image, color: Colors.grey),
-            ),
-          ),
+          child: content,
         ),
         Positioned(
           right: 0,
@@ -472,6 +504,19 @@ class AttachmentThumb extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  // Создает контейнер-заполнитель для не-изображений или ошибок
+  Widget _buildPlaceholder(BuildContext context, IconData icon, double size, {bool isImage = true}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: isImage ? Colors.grey.shade300 : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(icon, color: isImage ? Colors.grey : Theme.of(context).colorScheme.primary, size: 40),
     );
   }
 }

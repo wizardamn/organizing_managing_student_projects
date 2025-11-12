@@ -2,15 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/project_model.dart';
 import '../services/project_service.dart';
 
-// ----------------------------------------------------------------------
-// ✅ ENUM'ы
-// ----------------------------------------------------------------------
 enum ProjectFilter { all, inProgressOnly }
 enum SortBy { deadlineAsc, deadlineDesc, status }
 
-// ----------------------------------------------------------------------
-// ✅ PROJECT PROVIDER
-// ----------------------------------------------------------------------
 class ProjectProvider extends ChangeNotifier {
   final ProjectService _service;
 
@@ -18,43 +12,55 @@ class ProjectProvider extends ChangeNotifier {
   bool isLoading = false;
 
   String? _userId;
-  String _currentUserName = 'Гость'; // 💡 Для синхронизации с ProfileScreen
+  String _currentUserName = 'Гость';
 
   final List<ProjectModel> _projects = [];
 
   SortBy _sortBy = SortBy.deadlineAsc;
   ProjectFilter _filter = ProjectFilter.all;
 
-  // 💡 ИСПРАВЛЕНИЕ: Добавлен необязательный именованный параметр userId
-  ProjectProvider(this._service, {String? userId}) {
-    // Начальная установка владельца, если ID передан при запуске (например, при перезапуске сессии)
-    if (userId != null) {
-      _userId = userId;
-      isGuest = false;
-      _service.updateOwner(_userId);
-      // Примечание: _currentUserName будет 'Гость', пока не будет вызван setUser/LoginWrapper.
-    }
+  // ✅ ИСПРАВЛЕНИЕ: Конструктор больше не принимает userId
+  ProjectProvider(this._service) {
+    // Конструктор остается пустым, вся инициализация в setUser
   }
 
   // ------------------------------------------------
   // ✅ ГЕТТЕРЫ
   // ------------------------------------------------
   String get currentUserName => _currentUserName;
+  List<ProjectModel> get view {
+    var result = [..._projects];
+    if (_filter == ProjectFilter.inProgressOnly) {
+      result = result.where((p) => p.statusEnum == ProjectStatus.inProgress).toList();
+    }
+    switch (_sortBy) {
+      case SortBy.deadlineAsc:
+        result.sort((a, b) => a.deadline.compareTo(b.deadline));
+        break;
+      case SortBy.deadlineDesc:
+        result.sort((a, b) => b.deadline.compareTo(a.deadline));
+        break;
+      case SortBy.status:
+        result.sort((a, b) => a.statusEnum.index.compareTo(b.statusEnum.index));
+        break;
+    }
+    return result;
+  }
 
   // ------------------------------------------------
-  // ✅ ИНИЦИАЛИЗАЦИЯ
+  // ✅ ИНИЦИАЛИЗАЦИЯ (Вызывается из LoginWrapper)
   // ------------------------------------------------
-  /// Устанавливает пользователя, его имя и загружает проекты (вызывается после успешного входа)
   Future<void> setUser(String userId, String userName) async {
     _userId = userId;
-    _currentUserName = userName; // ✅ Установка имени
+    _currentUserName = userName; // ✅ Устанавливаем имя
     isGuest = false;
 
     _service.updateOwner(_userId);
-    await fetchProjects();
+    await fetchProjects(); // Загружаем проекты сразу
+    notifyListeners(); // Уведомляем UI, что мы больше не гость
   }
 
-  /// Устанавливает имя пользователя (вызывается из ProfileScreen)
+  // Вызывается из ProfileScreen
   void updateUserName(String newName) {
     if (_currentUserName != newName) {
       _currentUserName = newName;
@@ -62,7 +68,7 @@ class ProjectProvider extends ChangeNotifier {
     }
   }
 
-  /// Очищает состояние после выхода
+  // Вызывается из LoginWrapper при выходе
   void clear({bool keepProjects = false}) {
     isGuest = true;
     _userId = null;
@@ -72,38 +78,7 @@ class ProjectProvider extends ChangeNotifier {
     if (!keepProjects) {
       _projects.clear();
     }
-
     notifyListeners();
-  }
-
-  // ------------------------------------------------
-  // ✅ VIEW (сортировка + фильтрация)
-  // ------------------------------------------------
-  List<ProjectModel> get view {
-    var result = [..._projects];
-
-    // ✅ ФИЛЬТРАЦИЯ
-    if (_filter == ProjectFilter.inProgressOnly) {
-      result = result
-          .where((p) => p.statusEnum == ProjectStatus.inProgress)
-          .toList();
-    }
-
-    // ✅ СОРТИРОВКА
-    switch (_sortBy) {
-      case SortBy.deadlineAsc:
-        result.sort((a, b) => a.deadline.compareTo(b.deadline));
-        break;
-      case SortBy.deadlineDesc:
-        result.sort((a, b) => b.deadline.compareTo(a.deadline));
-        break;
-      case SortBy.status:
-      // Сортировка по enum.index
-        result.sort((a, b) => a.statusEnum.index.compareTo(b.statusEnum.index));
-        break;
-    }
-
-    return result;
   }
 
   // ------------------------------------------------
@@ -114,21 +89,16 @@ class ProjectProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-
     isLoading = true;
     notifyListeners();
-
     try {
       final loaded = await _service.getAll();
-
-      _projects
-        ..clear()
-        ..addAll(loaded);
+      _projects.clear();
+      _projects.addAll(loaded);
     } catch (e, st) {
       debugPrint("fetchProjects error: $e\n$st");
       _projects.clear();
     }
-
     isLoading = false;
     notifyListeners();
   }
@@ -147,25 +117,22 @@ class ProjectProvider extends ChangeNotifier {
   }
 
   // ------------------------------------------------
-  // ✅ CRUD ПРОЕКТОВ
+  // ✅ CRUD
   // ------------------------------------------------
   Future<void> addProject(ProjectModel p) async {
     if (isGuest) return;
-
     await _service.add(p);
     await fetchProjects();
   }
 
   Future<void> updateProject(ProjectModel p) async {
     if (isGuest) return;
-
     await _service.update(p);
     await fetchProjects();
   }
 
   Future<void> deleteProject(String id) async {
     if (isGuest) return;
-
     await _service.delete(id);
     await fetchProjects();
   }
@@ -175,7 +142,6 @@ class ProjectProvider extends ChangeNotifier {
   // ------------------------------------------------
   Future<List<Map<String, dynamic>>> getParticipants(String projectId) async {
     try {
-      // 💡 Предполагаем, что сервис получает участников, а не ProjectProvider
       return await _service.getParticipants(projectId);
     } catch (e) {
       debugPrint("getParticipants error: $e");
@@ -185,14 +151,12 @@ class ProjectProvider extends ChangeNotifier {
 
   Future<void> addParticipant(String projectId, String userId) async {
     if (isGuest) return;
-
     await _service.addParticipant(projectId, userId);
     await _refreshSingle(projectId);
   }
 
   Future<void> removeParticipant(String projectId, String userId) async {
     if (isGuest) return;
-
     await _service.removeParticipant(projectId, userId);
     await _refreshSingle(projectId);
   }
@@ -203,14 +167,11 @@ class ProjectProvider extends ChangeNotifier {
   Future<void> _refreshSingle(String projectId) async {
     try {
       final updated = await _service.getById(projectId);
-
       if (updated == null) return;
-
       final index = _projects.indexWhere((p) => p.id == projectId);
       if (index != -1) {
         _projects[index] = updated;
       }
-
       notifyListeners();
     } catch (e) {
       debugPrint("_refreshSingle error: $e");
@@ -224,7 +185,6 @@ class ProjectProvider extends ChangeNotifier {
     if (isGuest || _userId == null) {
       throw Exception("Гость не может создавать проекты");
     }
-
     return ProjectModel(
       id: "",
       ownerId: _userId!,
@@ -234,7 +194,7 @@ class ProjectProvider extends ChangeNotifier {
       status: ProjectStatus.planned.index,
       grade: null,
       attachments: const [],
-      participants: [_userId!], // Владелец всегда участник
+      participants: [_userId!],
       createdAt: DateTime.now(),
     );
   }
